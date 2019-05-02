@@ -1,0 +1,129 @@
+---
+title: "36-315 Interactive Project, Fall 2019"
+author: "Jenny Zhu"
+date: "Due Thursday, April 25th, 2019 (11:59pm ET) on Canvas"
+output: 
+  html_document:
+    toc:  true
+    toc_float:  true
+    code_folding:  hide
+---
+
+#  Interactive Project:  Air Quality
+
+**Organization, Themes, and HTML Output**
+
+```{r, warning = F, message = F}
+library(tidyverse)
+
+jwzhu_315_theme <-  theme_bw() + # White background, purple and blue theme
+  theme(axis.text = element_text(size = 12, color = "violetred"),
+        text = element_text(size = 14, face = "italic", color = "royalblue3"))
+```
+
+
+## Reading in the Data
+
+```{r, warning = FALSE, message = FALSE}
+ozone <- read_csv("daily_44201_2018.csv")
+pm25 <- read_csv("daily_88101_2018.csv")
+```
+
+## Choropleth Maps of Ozone and PM2.5 Levels
+
+```{r, warning = FALSE, message = FALSE}
+library(maps)
+library(mapproj)
+
+names(ozone)
+ozone <- mutate(ozone,
+                `State Code` = as.numeric(`State Code`))
+
+ozone$`Date Local`[1:10]
+warm_months <- seq(3:8)
+ozone$season <- ifelse(as.numeric(substr(ozone$`Date Local`,6,7)) %in% warm_months, "warm","cold")
+
+states_ozone <- ozone %>%
+group_by(`State Code`, `Date Local`, season) %>% 
+summarize(avg_ozone = mean(`Arithmetic Mean`))
+
+pm25 <- mutate(pm25,
+               `State Code` = as.numeric(`State Code`))
+
+states_pm25 <- pm25 %>%
+group_by(`State Code`, `Date Local`) %>% 
+summarize(avg_pm25 = mean(`Arithmetic Mean`))
+
+state_borders <- map_data("state") 
+state_borders <- mutate(state_borders,
+                        "FIPS" = state.fips$fips[match(region, state.fips$polyname)])
+
+#  join to state_borders
+state_borders <- state_borders %>%
+  left_join(states_ozone, by = c('FIPS' = 'State Code'))
+
+state_borders <- state_borders %>%
+  left_join(states_pm25, by = c('FIPS' = 'State Code'))
+```
+
+
+```
+The graph shows the average rent in January 2017 per state. It appears that the
+state of California had the highest average rent out of all states (shaded
+with purple), followed by several states in the upper east coast (New Jersey, 
+New York, etc..). Some other high rent states are Washington and Colorado.
+It appears that most states in the MidWest are relatively lower in terms of 
+average rent, especially Oklahoma and Arkansas.  
+```
+
+c.  (18 points) 
+```{r, warning = FALSE, message = FALSE}
+counties_zillow <- zillow %>%
+group_by(County) %>% 
+summarize(avg_1_17 = mean(`January 2017`))
+
+counties_zillow <- mutate(counties_zillow,
+                          County = tolower(County))
+
+county_borders <- map_data("county") 
+county_borders <- mutate(county_borders,
+                        "County" = tolower(subregion))
+
+#  join to state_borders
+county_borders <- county_borders %>%
+  left_join(counties_zillow, by = c("County" = "County"))
+
+#county_borders
+#counties_zillow
+ggplot(county_borders) + 
+  geom_polygon(aes(x = long, y = lat, group = group,
+                   fill = avg_1_17), color = "black") + 
+  scale_fill_gradient2(low = "darkgreen", mid = "lightgrey", 
+                       high = "darkorchid4", midpoint = 1800) +
+  theme_void() +
+  coord_map("polyconic") + 
+  labs(
+    title = "Average Rent in January 2017 by County",
+    subtitle = "Percent of Population in County",
+    caption = "Zillow rental data",
+    fill = "Average Rent ($)"
+  ) + 
+  theme(legend.position = "bottom") +
+  jwzhu_315_theme
+```
+
+```{r}
+library(shiny)
+runApp()
+library(rsconnect)
+deployApp()
+```
+
+***
+***
+***
+***
+***
+***
+
+
