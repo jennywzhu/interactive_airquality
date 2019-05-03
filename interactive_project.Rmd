@@ -78,38 +78,27 @@ average rent, especially Oklahoma and Arkansas.
 
 c.  (18 points) 
 ```{r, warning = FALSE, message = FALSE}
-counties_zillow <- zillow %>%
-group_by(County) %>% 
-summarize(avg_1_17 = mean(`January 2017`))
+states_avg_pm25 <- aggregate(states_pm25[,3], 
+                             list(states_pm25$`State Code`), mean)
+states_avg_ozone <- aggregate(states_ozone[,4], 
+                              list(states_ozone$`State Code`), mean)
 
-counties_zillow <- mutate(counties_zillow,
-                          County = tolower(County))
+states_air <- states_avg_pm25 %>% left_join(states_avg_ozone,
+                                            by=c('Group.1'='Group.1'))
 
-county_borders <- map_data("county") 
-county_borders <- mutate(county_borders,
-                        "County" = tolower(subregion))
+states_air <- mutate(states_air,
+                     FIPS = Group.1,
+                     Group.1 = state.fips$abb[match(Group.1, state.fips$fips)])
 
-#  join to state_borders
-county_borders <- county_borders %>%
-  left_join(counties_zillow, by = c("County" = "County"))
-
-#county_borders
-#counties_zillow
-ggplot(county_borders) + 
-  geom_polygon(aes(x = long, y = lat, group = group,
-                   fill = avg_1_17), color = "black") + 
-  scale_fill_gradient2(low = "darkgreen", mid = "lightgrey", 
-                       high = "darkorchid4", midpoint = 1800) +
-  theme_void() +
-  coord_map("polyconic") + 
-  labs(
-    title = "Average Rent in January 2017 by County",
-    subtitle = "Percent of Population in County",
-    caption = "Zillow rental data",
-    fill = "Average Rent ($)"
-  ) + 
-  theme(legend.position = "bottom") +
-  jwzhu_315_theme
+states_air[2,1] = "AK"
+states_air[12,1] = "HI"
+states_air[52,1] = "PR"
+states_air <- states_air[1:nrow(states_air)-1,] %>% select('Group.1','avg_pm25','avg_ozone')
+states_dst <- dist(states_air,) 
+dst <- as.matrix(states_dst) 
+dst_i <- 1/dst 
+library(qgraph)
+library(plotly)
 ```
 
 ```{r}

@@ -23,4 +23,9 @@ function(input, output) {
     }
 
   })
+  
+  output$network <- renderPlot({
+    q <- qgraph(dst_i, layout='spring', vsize=3, labels=states_air$Group.1)
+    #ggplotly(q)
+  })
 }
