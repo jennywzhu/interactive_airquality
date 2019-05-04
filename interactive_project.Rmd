@@ -34,36 +34,77 @@ pm25 <- read_csv("daily_88101_2018.csv")
 ```{r, warning = FALSE, message = FALSE}
 library(maps)
 library(mapproj)
+library(plotly)
 
 names(ozone)
 ozone <- mutate(ozone,
                 `State Code` = as.numeric(`State Code`))
-
-ozone$`Date Local`[1:10]
-warm_months <- seq(3:8)
-ozone$season <- ifelse(as.numeric(substr(ozone$`Date Local`,6,7)) %in% warm_months, "warm","cold")
-
-states_ozone <- ozone %>%
-group_by(`State Code`, `Date Local`, season) %>% 
-summarize(avg_ozone = mean(`Arithmetic Mean`))
-
 pm25 <- mutate(pm25,
                `State Code` = as.numeric(`State Code`))
 
-states_pm25 <- pm25 %>%
-group_by(`State Code`, `Date Local`) %>% 
+warm_months <- seq(3:8)
+ozone$season <- ifelse(as.numeric(substr(ozone$`Date Local`,6,7)) %in% warm_months, "warm","cold")
+
+pm25$season <- ifelse(as.numeric(substr(pm25$`Date Local`,6,7)) %in% warm_months, "warm","cold")
+
+ozone_cols <- ozone %>% select(`State Code`, season, `Arithmetic Mean`) %>% filter(season %in% c("warm", "cold"))
+
+pm25_cols <- pm25 %>% select(`State Code`, season, `Arithmetic Mean`) %>% filter(season %in% c("warm", "cold"))
+
+states_ozone <- ozone_cols %>%
+group_by(`State Code`, season) %>% 
+summarize(avg_ozone = mean(`Arithmetic Mean`))
+
+states_pm25 <- pm25_cols %>%
+group_by(`State Code`, season) %>% 
 summarize(avg_pm25 = mean(`Arithmetic Mean`))
 
 state_borders <- map_data("state") 
 state_borders <- mutate(state_borders,
-                        "FIPS" = state.fips$fips[match(region, state.fips$polyname)])
+                        'FIPS' = as.double(state.fips$fips[match(region, state.fips$polyname)]))
 
 #  join to state_borders
-state_borders <- state_borders %>%
-  left_join(states_ozone, by = c('FIPS' = 'State Code'))
+state_borders <- state_borders %>% select(long, lat, FIPS)
+
+state_borders <- states_ozone %>%
+  left_join(state_borders, by = c('State Code'='FIPS'))
 
 state_borders <- state_borders %>%
-  left_join(states_pm25, by = c('FIPS' = 'State Code'))
+  left_join(states_pm25, by = c('State Code'='State Code'))
+
+ggplot(state_borders) + 
+      geom_polygon(aes(x = long, y = lat, group = `State Code`,
+                       fill = avg_ozone), color = "black") + 
+      scale_fill_gradient2(low = "#2396B9", mid = "lightgrey", 
+                           high = "#C70039", midpoint = 0.03) +
+      theme_void() +
+      coord_map("polyconic") + 
+      labs(
+        title = "Average Ozone Level in 2018 by State",
+        #subtitle = "Percent of Population in State",
+        #caption = "Zillow rental data",
+        fill = "Average Ozone"
+      ) + 
+      theme(legend.position = "bottom") +
+      facet_wrap(. ~ season.x) +
+      jwzhu_315_theme
+
+ggplot(state_borders) + 
+      geom_polygon(aes(x = long, y = lat, group = `State Code`,
+                       fill = avg_pm25), color = "black") + 
+      scale_fill_gradient2(low = "#2396B9", mid = "lightgrey", 
+                           high = "#C70039", midpoint = 15) +
+      theme_void() +
+      coord_map("polyconic") + 
+      labs(
+        title = "Average Ozone Level in 2018 by State",
+        #subtitle = "Percent of Population in State",
+        #caption = "Zillow rental data",
+        fill = "Average Ozone"
+      ) + 
+      theme(legend.position = "bottom") +
+      facet_wrap(. ~ season.x) +
+      jwzhu_315_theme
 ```
 
 
@@ -78,9 +119,15 @@ average rent, especially Oklahoma and Arkansas.
 
 c.  (18 points) 
 ```{r, warning = FALSE, message = FALSE}
+southwest <- c(48, 40, 35, 4)
+west <- c(6, 8, 16, 30, 32, 41, 49, 53, 56) 
+midwest <- c(16, 17, 18, 19, 20, 26, 27, 29, 31, 38, 39, 46, 55)
+southeast <- c(1, 5, 12, 13, 21, 22, 28, 37, 45, 47, 51, 54)
+northeast <- c(9, 10, 11, 23, 24, 25, 27, 33, 34, 36, 42, 44, 50)
+
 states_avg_pm25 <- aggregate(states_pm25[,3], 
                              list(states_pm25$`State Code`), mean)
-states_avg_ozone <- aggregate(states_ozone[,4], 
+states_avg_ozone <- aggregate(states_ozone[,3], 
                               list(states_ozone$`State Code`), mean)
 
 states_air <- states_avg_pm25 %>% left_join(states_avg_ozone,
@@ -88,17 +135,25 @@ states_air <- states_avg_pm25 %>% left_join(states_avg_ozone,
 
 states_air <- mutate(states_air,
                      FIPS = Group.1,
-                     Group.1 = state.fips$abb[match(Group.1, state.fips$fips)])
+                     Group.1 = state.fips$abb[match(Group.1, state.fips$fips)],
+                     region = Group.1)
 
-states_air[2,1] = "AK"
-states_air[12,1] = "HI"
-states_air[52,1] = "PR"
-states_air <- states_air[1:nrow(states_air)-1,] %>% select('Group.1','avg_pm25','avg_ozone')
+states_air[states_air$FIPS %in% southwest, ]$region = "southwest"
+states_air[states_air$FIPS %in% west, ]$region = "west"
+states_air[states_air$FIPS %in% midwest, ]$region = "midwest"
+states_air[states_air$FIPS %in% southeast, ]$region = "southeast"
+states_air[states_air$FIPS %in% northeast, ]$region = "northeast"
+
+states_air <- states_air %>% filter(!is.na(Group.1))
+states_air <- states_air[1:nrow(states_air)-1,] %>% select('Group.1','avg_pm25','avg_ozone','region')
 states_dst <- dist(states_air,) 
 dst <- as.matrix(states_dst) 
 dst_i <- 1/dst 
+
 library(qgraph)
 library(plotly)
+
+qgraph(dst_i, layout='spring', groups=states_air$region, vsize=3, labels=states_air$Group.1)
 ```
 
 ```{r}
